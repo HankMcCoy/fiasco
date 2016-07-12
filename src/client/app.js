@@ -1,67 +1,66 @@
 import get from 'lodash/fp/get'
-import xs from 'xstream'
+import Rx from 'rxjs/Rx'
 import {run} from '@cycle/rxjs-run'
-import {div, label, input, hr, h1, makeDOMDriver} from '@cycle/dom'
+import {div, label, input, h1, form, makeDOMDriver} from '@cycle/dom'
 
-function intent(sources) {
-	const horizonCollection = sources.horizon('testing_text')
-	const inputChange$ = sources.DOM.select('.field').events('input')
-		.map(get('target.value'))
-	const writeOps$$ = inputChange$.map(text =>
-		horizonCollection.store({
-			datetime: new Date(),
-			text,
-		})
+import makeHorizonDriver from './make-horizon-driver'
+
+const main = (sources) => ({
+	DOM: view({DOM: sources.DOM}),
+})
+
+function view({DOM}) {
+	const signIn = SignIn({DOM})
+	const name$ = signIn.value
+	const chooseGame = ChooseGame({DOM, name$})
+	const page$ = signIn.submitted.map(submitted =>
+		submitted ? 'CHOOSE_GAME' : 'SIGN_IN'
 	)
-	const name$ = horizonCollection
-		.order('datetime', 'descending')
-		.limit(1)
-		.watch()
-		.map(get('0.text'))
 
+	return page$
+		.combineLatest(signIn.DOM, chooseGame.DOM)
+		.map(([page, signInVTree, chooseGameVTree]) =>
+			page === 'SIGN_IN'
+				? signInVTree
+				: chooseGameVTree
+		)
+}
+
+function ChooseGame({DOM, name$}) {
+	const vtree$ = name$.map(name => div(`Hello ${name}!`))
 	return {
-		writeOps$$,
-		name$,
+		DOM: vtree$,
 	}
 }
 
-function model(name$) {
-	return name$
-		.map(name => ({ name }))
-}
+function SignIn({DOM}) {
+	const value$ = DOM.select('.name').events('input')
+		.map(get('target.value'))
+		.startWith('')
+	const submitted$ = DOM.select('form').events('submit')
+		.do(event => event.preventDefault())
+		.map(() => true)
+		.startWith(false)
+		.take(2)
 
-function view(state$) {
-	return state$.map(({ name }) =>
-		div([
+	const vtree$ = value$.map((value) =>
+		form([
 			label('Name:'),
-			input('.field', {type: 'text', value: name}),
-			hr(),
-			h1(`Hello ${name || ''}`),
+			input('.name', {props: {type: 'text', value}}),
+			input({props: {type: 'submit'}}),
 		])
 	)
-}
 
-function main(sources) {
-	const intents = intent(sources)
-	const state$ = model(intents.name$)
-	const sinks = {
-		DOM: view(state$),
-		horizon: intents.writeOps$$,
+	return {
+		DOM: vtree$,
+		value: value$,
+		submitted: submitted$,
 	}
-
-	return sinks
 }
 
 const drivers = {
 	DOM: makeDOMDriver('#app-container'),
 	horizon: makeHorizonDriver(),
-}
-
-function makeHorizonDriver() {
-	return function horizonDriver(writeOps$$) {
-		writeOps$$.switch().subscribe()
-		return Horizon({ lazyWrites: true })
-	}
 }
 
 run(main, drivers)

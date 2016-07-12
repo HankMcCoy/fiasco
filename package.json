@@ -2,11 +2,11 @@
   "name": "fiasco",
   "version": "1.0.0",
   "scripts": {
-    "build": "webpack"
+    "build": "webpack",
+    "watch": "webpack --watch"
   },
   "dependencies": {
     "@cycle/dom": "^10.0.5",
-    "@cycle/xstream-run": "^3.0.3",
     "lodash": "^4.13.1",
     "xstream": "^5.1.4"
   },
